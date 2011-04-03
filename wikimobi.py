@@ -31,12 +31,13 @@ def main():
         print __doc__
         sys.exit(1)
     
-    with open(input_filename, 'rb') as xml_file, open(output_filename, 'wb+') as out_file:
-        tree = etree.parse(xml_file)
-        for doc in tree.iterfind('doc'):
-            header = doc.find('title').text.replace('Wikipedia: ', '', 1)
-            definition = doc.find('abstract').text.replace("\t", ' ')
-            out_file.write(u"%s\t%s\n" % (header, definition))
+    with open(input_filename, 'rb') as xml_file:
+        with open(output_filename, 'wb+') as out_file:
+            tree = etree.parse(xml_file)
+            for doc in tree.iterfind('doc'):
+                header = doc.find('title').text.replace('Wikipedia: ', '', 1)
+                definition = doc.find('abstract').text.replace("\t", ' ')
+                out_file.write(u"%s\t%s\n" % (header, definition))
     
 if __name__ == '__main__':
     main()
