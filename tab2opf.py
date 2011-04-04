@@ -251,7 +251,7 @@ for r in fr.xreadlines():
       </idx:entry>
       <mbp:pagebreak/>
 """ % (dt, dtstrip, dd))
-    print dt
+    #print dt
     i += 1
 
 to.write("""
