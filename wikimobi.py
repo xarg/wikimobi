@@ -18,6 +18,7 @@ More info here:
 """
 import subprocess
 import sys
+from copy import deepcopy
 from lxml import etree
 
 def main():
@@ -31,13 +32,48 @@ def main():
         print __doc__
         sys.exit(1)
     
+    c = 0
+    l = 10000
+    output = ''
+
     with open(input_filename, 'rb') as xml_file:
         with open(output_filename, 'wb+') as out_file:
-            tree = etree.parse(xml_file)
-            for doc in tree.iterfind('doc'):
-                header = doc.find('title').text.replace('Wikipedia: ', '', 1)
-                definition = doc.find('abstract').text.replace("\t", ' ')
-                out_file.write(u"%s\t%s\n" % (header, definition))
-    
+            for _, doc in etree.iterparse(xml_file, events=('end', ), tag='doc'):
+                header_el = deepcopy(doc.find('title'))
+                if header_el is None:
+                    del header_el
+                    continue
+                header_text = deepcopy(header_el.text)
+                del header_el
+                header = deepcopy(header_text.replace('Wikipedia: ', '', 1).strip().encode('utf-8', 'ignore'))
+                del header_text
+
+                definition = deepcopy(doc.find('abstract'))
+                if definition is None:
+                    del definition
+                    continue
+                definition_text = deepcopy(definition.text)
+                if definition_text is None:
+                    del definition_text
+                    continue
+
+                definition = deepcopy(definition_text.replace("\t", ' ').strip().encode('utf-8', 'ignore'))
+                output += "%s\t%s\n" % (header,  definition)
+                if c == l:
+                    out_file.write(output)
+                    out_file.flush()
+                    output = ''
+                    c = 0
+                else:
+                    c += 1
+                del header
+                del definition
+
+                # It's safe to call clear() here because no descendants will be accessed
+                doc.clear()
+                # Also eliminate now-empty references from the root node to <doc> 
+                while doc.getprevious() is not None:
+                    del doc.getparent()[0]
+
 if __name__ == '__main__':
     main()
