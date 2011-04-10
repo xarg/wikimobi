@@ -1,92 +1,150 @@
 #!/usr/bin/env python
 
 __doc__ = """
+Create mobi files from wikipedia categories
+===========================================
+
 Usage:
 
-python wikiepub.py path_to_abstract.xml path_to_output.tab
+python wikimobi.py [/nt_files_directory/] [/output_filename/] [Wikipedia Category] [levels (default:3)]
 
-Abstract file(s) can be found at:
+Required .nt file(s) can be found at:
 
-http://dumps.wikimedia.org/enwiki/latest/enwiki-latest-abstract.xml
+#Contains short abstracts of the articles (first paragraph)
 
-Warning: Last time I checked it was 3GB uncompressed
+    http://downloads.dbpedia.org/3.6/en/short_abstracts_en.nt.bz2 (300mb)
+
+#Contains relations between articles and categories
+
+    http://downloads.dbpedia.org/3.6/en/article_categories_en.nt.bz2 (115mb)
+
+#Contains relations between categories and subcategories in a skos type relation
+
+    http://downloads.dbpedia.org/3.6/en/skos_categories_en.nt.bz2 (18mb)
+
 
 More info here:
 
-    http://en.wikipedia.org/wiki/Wikipedia:Database_download
+    http://wiki.dbpedia.org/Downloads36
 
 """
-#import subprocess
-#import sys
-#from copy import deepcopy
-#from lxml import etree
+import re
+import tempfile
+import subprocess
+import sys
+import os
+import logging
 
-from rdflib.Graph import Graph
+logger = logging.getLogger("wikimobi")
 
-def category_graph():
-    graph = Graph("Sleepycat")
-    graph.open("store", create=True)
-    graph.parse("../skos_categories_en.nt", format="nt")
+cat_pattern = re.compile("Category:([^>]+)")
+title_pattern = re.compile("resource/([^>]+)")
 
-    # print out all the triples in the graph
-    for subject, predicate, object in graph:
-        import pdb; pdb.set_trace()
-        #print subject, predicate, object
+class WikiMobi(object):
+
+    def __init__(self, nt_dir, levels):
+        """ """
+        self.nt_dir = nt_dir
+        self.levels = levels
+
+    def get_child_categories(category, levels):
+        """Given a root `category` get all it's child categories up until
+        `levels` are reached. Levels as in depth of the `graph`
+
+        """
+        root_category = '<http://dbpedia.org/resource/Category:%s>' % category
+        categories1 = set()
+        categories2 = set()
+        categories3 = set()
+        categories4 = set()
+        relations = {}
+        parents = set()
+
+        with open('../skos_categories_en.nt', 'rb') as fin:
+            for line in fin:
+                (category, rel, parent) = line.split(" ")[:3]
+                if rel == '<http://www.w3.org/2004/02/skos/core#broader>':
+                    if parent not in relations:
+                        relations[parent] = set()
+                    relations[parent].add(category)
+
+        categories1 = relations[root_category]
+        for c in categories1:
+            if c in relations:
+                categories2 |= relations[c]
+        for c in categories2:
+            if c in relations:
+                categories3 |= relations[c]
+        for c in categories3:
+            if c in relations:
+                categories4 |= relations[c]
+
+        categories = set([root_category]) | categories1 | categories2 | categories3 #| categories4
+        return categories
+
+    def get_articles(self, category):
+
+        articles = set()
+
+        with open(".nt", 'rb') as fin:
+            for line in fin:
+                (subject, predicate, literal) = line.split(" ")[:3]
+                if literal in categories:
+                    articles.add(subject)
+
+    def write_abstracts(self, tmpfile):
+        with open("../short_abstracts_en.nt", 'rb') as fin:
+            with open('../out.tab', 'wb+') as out_file:
+                for line in fin:
+                    (subject, predicate, literal) = line.split(" ", 2)
+                    if subject in articles:
+                        title = title_pattern.search(subject).group(1).replace("_",
+                                                                               " ")
+                        definition = literal.strip()[1:-6]
+                        tmpfile.write("%s\t%s\n" % (title, definition.replace("\t", " ")))
 
 def main():
-    """ This will write a tab separated <header>\t<definition> file that will
-    be passed to mobigen and will result in a .mobi file containing the
-    dictionary.
+    """ Write a tab separated <term>\t<definition>\n file that will
+    be passed to `tab2opf.py` which will generate a .opf file which will passed
+    `mobigen` and will result in a .mobi file containing the dictionary.
+
+    Basically:
+
+        python wikimoby.py ->.tab (tabfile)
+        python tab2opf.py .tab -> .opf (and a bunch of html files)
+        wine mobigen/mobigen.exe .opf -> .mobi
 
     """
-    input_filename, output_filename = sys.argv[1:3]
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         print __doc__
         sys.exit(1)
 
-    c = 0
-    l = 10000
-    output = ''
 
-    with open(input_filename, 'rb') as xml_file:
-        with open(output_filename, 'wb+') as out_file:
-            for _, doc in etree.iterparse(xml_file, events=('end', ), tag='doc'):
-                header_el = deepcopy(doc.find('title'))
-                if header_el is None:
-                    del header_el
-                    continue
-                header_text = deepcopy(header_el.text)
-                del header_el
-                header = deepcopy(header_text.replace('Wikipedia: ', '', 1).strip().encode('utf-8', 'ignore'))
-                del header_text
+    nt_dir, output_file, category = sys.argv[1:4]
+    if output_file != sys.argv[-1]:
+        levels = sys.argv[-1]
+    else:
+        levels = 3
+    convertor = WikiMobi(nt_dir, output_file, levels)
 
-                definition = deepcopy(doc.find('abstract'))
-                if definition is None:
-                    del definition
-                    continue
-                definition_text = deepcopy(definition.text)
-                if definition_text is None:
-                    del definition_text
-                    continue
+    logger.info("Getting child categories for %r" % category)
+    categories = convertor.get_child_categories(category)
 
-                definition = deepcopy(definition_text.replace("\t", ' ').strip().encode('utf-8', 'ignore'))
-                output += "%s\t%s\n" % (header,  definition)
-                if c == l:
-                    out_file.write(output)
-                    out_file.flush()
-                    output = ''
-                    c = 0
-                else:
-                    c += 1
-                del header
-                del definition
+    logger.info("Getting related articles of %r" % category)
+    articles = convertor.get_articles(categories)
 
-                # It's safe to call clear() here because no descendants will be accessed
-                doc.clear()
-                # Also eliminate now-empty references from the root node to <doc>
-                while doc.getprevious() is not None:
-                    del doc.getparent()[0]
+    _, abstracts_file = tempfile.mkstemp()
+    with open(abstracts_file, 'wb+') as tmpfile:
+        logger.info("Writing abstracts of articles to tmp file in tab "
+                    "format: %r" % category)
+        convertor.write_abstracts(articles, tmpfile)
+
+    logger.info("Calling tab2opf.py")
+    return_code = subprocess.check_call("tab2opf.py", abstracts_file)
+    if return_code == 0: #Success
+        os.unlink(abstracts_file)
+        logger.info("Calling mobigen.exe")
+        subprocess.call("wine", "mobigen/mobigen.exe", abstracts_file)
 
 if __name__ == '__main__':
-    #main()
-    category_graph()
+    main()
