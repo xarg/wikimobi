@@ -4,10 +4,6 @@ __doc__ = """
 Create mobi files from wikipedia categories
 ===========================================
 
-Usage:
-
-python wikimobi.py [/nt_files_directory/] [/output_filename/] [Wikipedia Category] [levels (default:3)]
-
 Required .nt file(s) can be found at:
 
 #Contains short abstracts of the articles (first paragraph)
@@ -32,8 +28,9 @@ More info here:
 import re
 import tempfile
 import subprocess
-import sys
+import argparse
 import os
+import shutil
 import logging
 
 logger = logging.getLogger("wikimobi")
@@ -119,16 +116,24 @@ def main():
         wine mobigen/mobigen.exe .opf -> .mobi
 
     """
-    if len(sys.argv) != 4:
-        print __doc__
-        sys.exit(1)
 
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('-nt', dest='nt_dir',
+                        help='Directory where .nt files are')
+    parser.add_argument('-o', dest='output_file',
+                        help='Output filename (without extension)')
+    parser.add_argument('-c', dest='category',
+                        help='Wikipedia category')
+    parser.add_argument('-l', dest='levels', type=int, default=3,
+                        help='Number of levels beneeth the wikipedia category.'
+                        ' This is used to get the related categories.')
 
-    nt_dir, output_file, category = sys.argv[1:4]
-    if category != sys.argv[-1]:
-        levels = sys.argv[-1]
-    else:
-        levels = 3
+    args = parser.parse_args()
+    nt_dir = args.nt_dir
+    output_file = args.output_file
+    category = args.category
+    levels = args.levels
+
     convertor = WikiMobi(nt_dir)
 
     logger.info("Getting child categories for %r" % category)
@@ -143,20 +148,32 @@ def main():
         convertor.write_abstracts(articles, tmpfile)
 
     tabfile = "%s.tab" % output_file
+
+    tmpdir = tempfile.mkdtemp()
+
     logger.info("Renamed tmpfile to %s" % tabfile)
-    os.rename(abstracts_file, tabfile)
+    os.rename(abstracts_file, os.path.join(tmpdir, tabfile))
 
-    cmd = ["python", "tab2opf.py", tabfile]
-    logger.info("Calling %s" % " ".join(cmd))
-    return_code = subprocess.check_call(cmd)
-
-    if return_code == 0: #Success
-        os.unlink(tabfile)
-        cmd = ["wine", "mobigen/mobigen.exe", "-unicode", "%s.opf" %
-               os.path.basename(output_file)]
+    current_dir = os.getcwd()
+    os.chdir(tmpdir)
+    try:
+        cmd = ["python", os.path.join(current_dir, "tab2opf.py"), tabfile]
         logger.info("Calling %s" % " ".join(cmd))
         return_code = subprocess.check_call(cmd)
-        logger.info("Finished")
+        if return_code == 0: #Success
+            cmd = ["wine", os.path.join(current_dir, "mobigen", "mobigen.exe"),
+                    "-unicode", "%s.opf" %
+                   os.path.basename(output_file)]
+            logger.info("Calling %s" % " ".join(cmd))
+            return_code = subprocess.call(cmd)
+    finally:
+        mobifile = os.path.join(tmpdir, output_file + '.mobi')
+        logger.info("Trying to copy .mobi file %s to current dir", mobifile)
+        shutil.copy(mobifile, current_dir)
+        os.chdir(current_dir)
+        logger.info("Cleaning up %s", tmpdir)
+        shutil.rmtree(tmpdir)
+    logger.info("Finished")
 
 if __name__ == '__main__':
     main()
