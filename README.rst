@@ -6,11 +6,11 @@ This way your kindle will have dictionary lookups in wikipedia articles.
 
 Usage::
     
-    wikimobi path_to_nt_files_dir/ physics Physics
+    wikimobi -nt path_to_nt_files_dir/ -o physics -c Physics
 
-This will create a phisics.mobi in your current directory which is the dictionary.
+This will create a physics.mobi in your current directory which is the dictionary.
 
-equired .nt file(s) can be found at:
+Required .nt file(s) can be found at:
 
 Contains short abstracts of the articles (first paragraph)::
 
