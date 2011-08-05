@@ -34,4 +34,10 @@ All uncompressed: ~3.4GB
 More info here::
 
     http://wiki.dbpedia.org/Downloads36
-    
+
+Credits
+---------
+
+The first version was developed during a coding day at http://pybucuresti.grep.ro/
+with the help of Andrei Laza  - Thanks man!
+
