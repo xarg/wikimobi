@@ -4,8 +4,13 @@ wikimobi
 Convert wikipedia abstracts to mobi dictionary.
 This way your kindle will have dictionary lookups in wikipedia articles.
 
+Note: Make sure you have python2.7 or higher and wine (for mobigen.exe) installed.
+
 Usage::
     
+    git clone git://github.com/humanfromearth/wikimobi.git
+    cd wikimobi/
+    sudo python setup.py install
     wikimobi -nt path_to_nt_files_dir/ -o physics -c Physics
 
 This will create a physics.mobi in your current directory which is the dictionary.
